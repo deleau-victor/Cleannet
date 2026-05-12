@@ -1,0 +1,60 @@
+{
+  "[csharp]": {
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-dotnettools.csharp"
+  },
+  "cSpell.language": "en,fr",
+  "cSpell.words": [
+    "appsettings",
+    "Authentik",
+    "dotnet",
+    "DOTNET",
+    "Dtos",
+    "initializers",
+    "Npgsql",
+    "oidc",
+    "Oidc",
+    "opencover",
+    "Pkce",
+    "Postgre",
+    "postgres",
+    "runsettings",
+    "slnx",
+    "yarp",
+    "Yarp"
+  ],
+  "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "fullSolution",
+  "dotnet.formatting.organizeImportsOnFormat": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "dotnet.unitTests.runSettingsPath": "tests/.runsettings",
+  "editor.rulers": [120],
+  "files.associations": {
+    "*.json": "jsonc",
+    "*.slnx": "xml",
+    "*.esproj": "xml"
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/bin/**": true,
+    "**/obj/**": true
+  },
+  "omnisharp.useEditorFormattingSettings": false,
+  "omnisharp.enableEditorConfigSupport": true,
+  "search.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/bin/**": true,
+    "**/obj/**": true
+  }
+}

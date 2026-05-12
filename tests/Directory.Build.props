@@ -1,0 +1,14 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)\.runsettings</RunSettingsFilePath>
+    <!--
+      Analyzers désactivés pour les projets de test :
+      - CA1305 : tests vérifient explicitement le comportement par défaut (culture invariante)
+      - CA1052 : les classes de tests xUnit utilisent des nested classes pour regrouper
+    -->
+    <NoWarn>$(NoWarn);CA1305;CA1052</NoWarn>
+  </PropertyGroup>
+
+</Project>

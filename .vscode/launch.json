@@ -1,0 +1,10 @@
+{
+  "configurations": [
+    {
+      "type": "aspire",
+      "request": "launch",
+      "name": "Aspire: Launch App Host",
+      "program": "${workspaceFolder}/src/AspireHost/AspireHost.csproj"
+    }
+  ]
+}

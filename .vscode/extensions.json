@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "ms-dotnettools.csharp",
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.vscode-dotnet-runtime",
+    "microsoft-aspire.aspire-vscode",
+    "streetsidesoftware.code-spell-checker",
+    "dbaeumer.vscode-eslint",
+    "ms-vscode.extension-test-runner",
+    "Orta.vscode-jest",
+    "esbenp.prettier-vscode",
+    "redhat.vscode-yaml",
+    "streetsidesoftware.code-spell-checker-french",
+    "EditorConfig.EditorConfig",
+    "patcx.vscode-nuget-gallery",
+    "christian-kohler.path-intellisense"
+  ]
+}
