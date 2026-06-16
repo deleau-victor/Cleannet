@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
-using System.Globalization;
 
-namespace Domain.Abstractions;
+namespace Domain.Abstractions.Results;
 
 /// <summary>
 /// Représente le résultat d'une opération qui peut réussir ou échouer.
@@ -18,34 +17,45 @@ namespace Domain.Abstractions;
 /// </remarks>
 public readonly record struct Result<T>
 {
-    /// <summary>
-    /// Indique si le résultat est un succès.
-    /// </summary>
-    public bool IsSuccess { get; }
-
-    /// <summary>
-    /// Indique si le résultat est un échec. Inverse de <see cref="IsSuccess"/>.
-    /// </summary>
-    public bool IsFailure => !IsSuccess;
-
     private readonly T? _value;
     private readonly ResultError? _error;
+    private readonly ResultState _state;
+
+    /// <summary>
+    /// Indique si le résultat est un succès ou un échec. Un résultat non initialisé est considéré comme invalide.
+    /// </summary>
+    public bool IsSuccess => _state == ResultState.Success;
+
+    /// <summary>
+    /// Indique si le résultat est un échec. Un résultat non initialisé est considéré comme invalide.
+    /// </summary>
+    public bool IsFailure => _state == ResultState.Failure;
 
     /// <summary>
     /// La valeur du résultat en cas de succès.
     /// </summary>
     /// <exception cref="InvalidOperationException">Si le résultat est un échec.</exception>
-    public T Value => IsSuccess
-         ? _value!
-         : throw new InvalidOperationException("No value for failure result");
+    /// <exception cref="InvalidOperationException">Si le résultat est non initialisé.</exception>
+    public T Value => _state switch
+    {
+        ResultState.Uninitialized => throw new InvalidOperationException("Result is uninitialized"),
+        ResultState.Success => _value!,
+        ResultState.Failure => throw new InvalidOperationException("No value for failure result"),
+        _ => throw new InvalidOperationException("Invalid result state")
+    };
 
     /// <summary>
     /// L'erreur du résultat en cas d'échec.
     /// </summary>
     /// <exception cref="InvalidOperationException">Si le résultat est un succès.</exception>
-    public ResultError Error => IsFailure
-        ? _error!
-        : throw new InvalidOperationException("No error for success result");
+    /// <exception cref="InvalidOperationException">Si le résultat est non initialisé.</exception>
+    public ResultError Error => _state switch
+    {
+        ResultState.Uninitialized => throw new InvalidOperationException("Result is uninitialized"),
+        ResultState.Success => throw new InvalidOperationException("No error for success result"),
+        ResultState.Failure => _error!,
+        _ => throw new InvalidOperationException("Invalid result state")
+    };
 
     /// <summary>
     /// Le type de succès, mappable sur un code HTTP 2xx (Ok, Created, Accepted, NoContent).
@@ -55,7 +65,7 @@ public readonly record struct Result<T>
 
     private Result(T value, SuccessType successType)
     {
-        IsSuccess = true;
+        _state = ResultState.Success;
         _value = value;
         _error = null;
         SuccessType = successType;
@@ -63,7 +73,7 @@ public readonly record struct Result<T>
 
     private Result(ResultError error)
     {
-        IsSuccess = false;
+        _state = ResultState.Failure;
         _value = default;
         _error = error;
         SuccessType = default;
@@ -89,16 +99,6 @@ public readonly record struct Result<T>
     public static Result<T> Failure(ResultError error) => new(error);
 
     // ──────────────────────────────────────────────────────────────────
-    // Implicit converters (DSL ergonomique)
-    // ──────────────────────────────────────────────────────────────────
-
-    /// <summary>Conversion implicite depuis une valeur : <c>Result&lt;int&gt; r = 42;</c></summary>
-    public static implicit operator Result<T>(T value) => Success(value);
-
-    /// <summary>Conversion implicite depuis une erreur : <c>Result&lt;int&gt; r = new ResultError(...);</c></summary>
-    public static implicit operator Result<T>(ResultError error) => Failure(error);
-
-    // ──────────────────────────────────────────────────────────────────
     // Match : déconstruit le Result en une valeur unique
     // ──────────────────────────────────────────────────────────────────
 
@@ -109,16 +109,16 @@ public readonly record struct Result<T>
     /// <param name="onSuccess">Fonction appelée en cas de succès, avec la valeur.</param>
     /// <param name="onFailure">Fonction appelée en cas d'échec, avec l'erreur.</param>
     /// <example>
-    /// <code>
-    /// string label = result.Match(
-    ///     onSuccess: u =&gt; $"Hello {u.Name}",
-    ///     onFailure: e =&gt; $"Erreur: {e.Code}");
-    /// </code>
+    ///     <code>
+    ///     string label = result.Match(
+    ///         onSuccess: u =&gt; $"Hello {u.Name}",
+    ///         onFailure: e =&gt; $"Erreur: {e.Code}");
+    ///     </code>
     /// </example>
     public TResult Match<TResult>(Func<T, TResult> onSuccess, Func<ResultError, TResult> onFailure)
-       => IsSuccess
-          ? onSuccess(Value)
-          : onFailure(Error);
+        => IsSuccess
+            ? onSuccess(Value)
+            : onFailure(Error);
 
     // ──────────────────────────────────────────────────────────────────
     // Map : transforme la valeur en cas de succès (functor)
@@ -136,15 +136,15 @@ public readonly record struct Result<T>
     /// </code>
     /// </example>
     public Result<TNew> Map<TNew>(Func<T, TNew> mapper)
-       => IsSuccess
-          ? Result<TNew>.Success(mapper(Value), SuccessType)
-          : Result<TNew>.Failure(Error);
+        => IsSuccess
+            ? Result<TNew>.Success(mapper(Value), SuccessType)
+            : Result<TNew>.Failure(Error);
 
     /// <summary>Version asynchrone de <see cref="Map{TNew}(Func{T, TNew})"/>.</summary>
     public async Task<Result<TNew>> MapAsync<TNew>(Func<T, Task<TNew>> mapper)
-       => IsSuccess
-          ? Result<TNew>.Success(await mapper(Value), SuccessType)
-          : Result<TNew>.Failure(Error);
+        => IsSuccess
+            ? Result<TNew>.Success(await mapper(Value), SuccessType)
+            : Result<TNew>.Failure(Error);
 
     // ──────────────────────────────────────────────────────────────────
     // Bind : enchaîne une opération qui retourne aussi un Result (monad)
@@ -164,15 +164,15 @@ public readonly record struct Result<T>
     /// </code>
     /// </example>
     public Result<TNew> Bind<TNew>(Func<T, Result<TNew>> binder)
-       => IsSuccess
-          ? binder(Value)
-          : Result<TNew>.Failure(Error);
+        => IsSuccess
+            ? binder(Value)
+            : Result<TNew>.Failure(Error);
 
     /// <summary>Version asynchrone de <see cref="Bind{TNew}(Func{T, Result{TNew}})"/>.</summary>
     public async Task<Result<TNew>> BindAsync<TNew>(Func<T, Task<Result<TNew>>> binder)
-       => IsSuccess
-          ? await binder(Value)
-          : Result<TNew>.Failure(Error);
+        => IsSuccess
+            ? await binder(Value)
+            : Result<TNew>.Failure(Error);
 
     // ──────────────────────────────────────────────────────────────────
     // Tap : side-effect en cas de succès, ne change pas la valeur
@@ -191,6 +191,7 @@ public readonly record struct Result<T>
     /// </example>
     public Result<T> Tap(Action<T> action)
     {
+        ThrowIfUninitialized();
         if (IsSuccess)
             action(Value);
 
@@ -200,6 +201,7 @@ public readonly record struct Result<T>
     /// <summary>Version asynchrone de <see cref="Tap(Action{T})"/>.</summary>
     public async Task<Result<T>> TapAsync(Func<T, Task> action)
     {
+        ThrowIfUninitialized();
         if (IsSuccess)
             await action(Value);
 
@@ -215,6 +217,7 @@ public readonly record struct Result<T>
     /// </summary>
     public Result<T> TapError(Action<ResultError> action)
     {
+        ThrowIfUninitialized();
         if (IsFailure)
             action(Error);
 
@@ -224,6 +227,7 @@ public readonly record struct Result<T>
     /// <summary>Version asynchrone de <see cref="TapError(Action{ResultError})"/>.</summary>
     public async Task<Result<T>> TapErrorAsync(Func<ResultError, Task> action)
     {
+        ThrowIfUninitialized();
         if (IsFailure)
             await action(Error);
 
@@ -244,7 +248,10 @@ public readonly record struct Result<T>
     /// </code>
     /// </example>
     public Result<T> MapError(Func<ResultError, ResultError> mapper)
-       => IsFailure ? Result<T>.Failure(mapper(Error)) : this;
+    {
+        ThrowIfUninitialized();
+        return IsFailure ? Result<T>.Failure(mapper(Error)) : this;
+    }
 
     // ──────────────────────────────────────────────────────────────────
     // Recover : convertit une erreur en succès (fallback)
@@ -260,22 +267,34 @@ public readonly record struct Result<T>
     /// </code>
     /// </example>
     public Result<T> Recover(Func<ResultError, T> fallback)
-       => IsFailure ? Result<T>.Success(fallback(Error)) : this;
+    {
+        ThrowIfUninitialized();
+        return IsFailure ? Result<T>.Success(fallback(Error)) : this;
+    }
 
     /// <summary>
     /// Convertit l'erreur en un nouveau <see cref="Result{T}"/> (peut rester un échec).
     /// </summary>
     /// <param name="fallback">Fonction produisant un résultat à partir de l'erreur.</param>
     public Result<T> Recover(Func<ResultError, Result<T>> fallback)
-       => IsFailure ? fallback(Error) : this;
+    {
+        ThrowIfUninitialized();
+        return IsFailure ? fallback(Error) : this;
+    }
 
     /// <summary>Version asynchrone de <see cref="Recover(Func{ResultError, T})"/>.</summary>
     public async Task<Result<T>> RecoverAsync(Func<ResultError, Task<T>> fallback)
-       => IsFailure ? Result<T>.Success(await fallback(Error)) : this;
+    {
+        ThrowIfUninitialized();
+        return IsFailure ? Result<T>.Success(await fallback(Error)) : this;
+    }
 
     /// <summary>Version asynchrone de <see cref="Recover(Func{ResultError, Result{T}})"/>.</summary>
     public async Task<Result<T>> RecoverAsync(Func<ResultError, Task<Result<T>>> fallback)
-       => IsFailure ? await fallback(Error) : this;
+    {
+        ThrowIfUninitialized();
+        return IsFailure ? await fallback(Error) : this;
+    }
 
     // ──────────────────────────────────────────────────────────────────
     // Ensure : guard clause monadique (validation chaînable)
@@ -308,6 +327,58 @@ public readonly record struct Result<T>
             return this;
 
         return await predicate(Value) ? this : Result<T>.Failure(errorIfFalse);
+    }
+
+    /// <summary>
+    /// Variante de <see cref="Ensure(Func{T, bool}, ResultError)"/> où l'erreur est construite à partir
+    /// de la valeur, utile pour des messages d'erreur paramétrés par l'état courant.
+    /// </summary>
+    /// <param name="predicate">Prédicat à satisfaire.</param>
+    /// <param name="errorBuilder">Fonction qui construit l'erreur à partir de la valeur lorsque le prédicat échoue.</param>
+    /// <example>
+    /// <code>
+    /// result.Ensure(
+    ///     u =&gt; u.Age &gt;= 18,
+    ///     u =&gt; new ResultError("User.TooYoung", "Âge {0} insuffisant", [u.Age]));
+    /// </code>
+    /// </example>
+    public Result<T> Ensure(Func<T, bool> predicate, Func<T, ResultError> errorBuilder)
+    {
+        if (IsFailure)
+            return this;
+
+        return predicate(Value) ? this : Result<T>.Failure(errorBuilder(Value));
+    }
+
+    /// <summary>Version asynchrone de <see cref="Ensure(Func{T, bool}, Func{T, ResultError})"/>.</summary>
+    public async Task<Result<T>> EnsureAsync(Func<T, Task<bool>> predicate, Func<T, ResultError> errorBuilder)
+    {
+        if (IsFailure)
+            return this;
+
+        return await predicate(Value) ? this : Result<T>.Failure(errorBuilder(Value));
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Implicit converters (DSL ergonomique)
+    // ──────────────────────────────────────────────────────────────────
+
+    /// <summary>Conversion implicite depuis une valeur : <c>Result&lt;int&gt; r = 42;</c></summary>
+    public static implicit operator Result<T>(T value) => Success(value);
+
+    /// <summary>Conversion implicite depuis une erreur : <c>Result&lt;int&gt; r = new ResultError(...);</c></summary>
+    public static implicit operator Result<T>(ResultError error) => Failure(error);
+
+    // ──────────────────────────────────────────────────────────────────
+    // Guards privés
+    // ──────────────────────────────────────────────────────────────────
+
+    private bool IsInitialized => _state != ResultState.Uninitialized;
+
+    private void ThrowIfUninitialized()
+    {
+        if (!IsInitialized)
+            throw new InvalidOperationException("Result is uninitialized");
     }
 }
 
@@ -368,214 +439,104 @@ public static class Result
             return Result<T>.Failure(errorMapper(ex));
         }
     }
-}
 
-/// <summary>
-/// Catégorise une erreur métier pour permettre un mapping automatique vers un code HTTP de réponse.
-/// </summary>
-public enum ErrorType
-{
-    /// <summary>
-    /// Erreurs de validation : données d'entrée ne respectant pas les contraintes
-    /// (champ manquant, format invalide, valeur hors plage).
-    /// </summary>
-    /// <remarks>Équivalent à HTTP 400 Bad Request.</remarks>
-    Validation,
+    // ──────────────────────────────────────────────────────────────────
+    // Combine : fail-fast, premier échec gagne
+    // ──────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Utilisateur non authentifié ou informations d'identification invalides.
+    /// Combine N <see cref="Result{T}"/> en un <see cref="Result{TList}"/> de type <see cref="IReadOnlyList{T}"/>.
+    /// Sémantique <strong>fail-fast</strong> : retourne la première erreur rencontrée sans évaluer les Results suivants
+    /// (note : les Results déjà matérialisés sont quand même itérés ; seul l'agrégation s'arrête).
     /// </summary>
-    /// <remarks>Équivalent à HTTP 401 Unauthorized.</remarks>
-    Unauthorized,
-
-    /// <summary>
-    /// Utilisateur authentifié mais sans les permissions nécessaires pour accéder à la ressource
-    /// ou effectuer l'action demandée.
-    /// </summary>
-    /// <remarks>Équivalent à HTTP 403 Forbidden.</remarks>
-    Forbidden,
-
-    /// <summary>
-    /// Ressource demandée introuvable.
-    /// </summary>
-    /// <remarks>Équivalent à HTTP 404 Not Found.</remarks>
-    NotFound,
-
-    /// <summary>
-    /// Conflit avec l'état actuel de la ressource (ex. version stale, doublon).
-    /// </summary>
-    /// <remarks>Équivalent à HTTP 409 Conflict.</remarks>
-    Conflict,
-
-    /// <summary>
-    /// Échec générique sans cause spécifique.
-    /// </summary>
-    /// <remarks>Équivalent à HTTP 500 Internal Server Error.</remarks>
-    Failure,
-}
-
-/// <summary>
-/// Catégorise un succès pour permettre un mapping automatique vers un code HTTP 2xx.
-/// </summary>
-public enum SuccessType
-{
-    /// <summary>Réponse standard avec données. HTTP 200 OK.</summary>
-    Ok,
-    /// <summary>Nouvelle ressource créée. HTTP 201 Created.</summary>
-    Created,
-    /// <summary>Requête acceptée pour traitement asynchrone. HTTP 202 Accepted.</summary>
-    Accepted,
-    /// <summary>Succès sans contenu à retourner. HTTP 204 No Content.</summary>
-    NoContent,
-}
-
-/// <summary>
-/// Décrit une erreur métier de manière sérialisable et localisable.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Le <see cref="Message"/> est un <strong>template</strong> (ex. <c>"Le pseudo doit faire entre {0} et {1} caractères"</c>).
-/// Le rendu se fait à la demande via <see cref="FormattedMessage(IFormatProvider?)"/>, ce qui permet
-/// la localisation en couche présentation (i18n basée sur <see cref="Code"/>).
-/// </para>
-/// <para>
-/// Convention sur <see cref="Args"/> : <strong>uniquement des types primitifs</strong>
-/// (string, int, long, bool, decimal, double, float, char...). Pas de DateTime, enum, ou objets complexes —
-/// ces types ont des représentations dépendantes de la culture qui posent problème pour la sérialisation
-/// et la localisation. Cette contrainte est validée à l'exécution dans l'<c>init</c> setter.
-/// </para>
-/// </remarks>
-/// <param name="Code">Identifiant technique de l'erreur (clé i18n), format conseillé <c>{Entity}.{Operation}.{Problem}</c>.</param>
-/// <param name="Message">Template du message (peut contenir des placeholders <c>{0}</c>, <c>{1}</c>, ... référant à <see cref="Args"/>).</param>
-/// <param name="Type">Catégorie d'erreur, mappable sur un code HTTP via <see cref="ErrorType"/>.</param>
-public record ResultError(string Code, string Message, ErrorType Type = ErrorType.Failure)
-{
-    private readonly ImmutableArray<object> _args = [];
-
-    /// <summary>
-    /// Arguments positionnels associés aux placeholders du template <see cref="Message"/>.
-    /// </summary>
-    /// <remarks>
-    /// L'assignation est validée : seuls les types primitifs (string, int, bool, decimal, ...) sont autorisés.
-    /// L'état <c>default(ImmutableArray)</c> est normalisé en <see cref="ImmutableArray{T}.Empty"/>.
-    /// </remarks>
-    public ImmutableArray<object> Args
+    /// <typeparam name="T">Type des valeurs.</typeparam>
+    /// <param name="results">Séquence de Results à combiner.</param>
+    /// <returns>Result de succès contenant toutes les valeurs, ou Result d'échec avec la première erreur.</returns>
+    /// <example>
+    /// <code>
+    /// Result.Combine(loadUser, loadOrder, loadInvoice)
+    ///     .Map(items =&gt; new Aggregate(items[0], items[1], items[2]));
+    /// </code>
+    /// </example>
+    public static Result<IReadOnlyList<T>> Combine<T>(IEnumerable<Result<T>> results)
     {
-        get => _args;
-        init
+        List<T> values = [];
+        foreach (Result<T> r in results)
         {
-            ResultErrorArgsValidator.Validate(value, nameof(Args));
-            _args = value.IsDefault ? [] : value;
-        }
-    }
-
-    /// <summary>
-    /// Dictionnaire des erreurs par champ, utilisé pour <see cref="ErrorType.Validation"/>.
-    /// La clé est le nom du champ, la valeur la liste immuable des erreurs sur ce champ.
-    /// </summary>
-    public ImmutableDictionary<string, ImmutableArray<ValidationFieldError>>? ValidationErrors { get; init; }
-
-    /// <summary>
-    /// Construit une erreur avec des arguments pour le template.
-    /// </summary>
-    /// <param name="Code">Identifiant technique.</param>
-    /// <param name="Message">Template (peut contenir <c>{0}</c>, <c>{1}</c>, ...).</param>
-    /// <param name="args">Arguments positionnels pour rendre le template.</param>
-    /// <param name="Type">Catégorie d'erreur.</param>
-    public ResultError(string Code, string Message, ImmutableArray<object> args, ErrorType Type = ErrorType.Failure)
-        : this(Code, Message, Type)
-    {
-        Args = args;
-    }
-
-    /// <summary>
-    /// Rend le <see cref="Message"/> en substituant les <see cref="Args"/>.
-    /// </summary>
-    /// <param name="provider">Culture utilisée pour le formatage. <see cref="CultureInfo.InvariantCulture"/> par défaut.</param>
-    /// <returns>Le message rendu, ou le template tel quel si aucun arg n'est fourni.</returns>
-    public string FormattedMessage(IFormatProvider? provider = null)
-    {
-        if (_args.IsDefaultOrEmpty)
-            return Message;
-
-        object[] arr = new object[_args.Length];
-        _args.CopyTo(arr);
-        return string.Format(provider ?? CultureInfo.InvariantCulture, Message, arr);
-    }
-
-    /// <inheritdoc/>
-    public virtual bool Equals(ResultError? other)
-    {
-        if (other is null)
-            return false;
-        if (ReferenceEquals(this, other))
-            return true;
-        return Code == other.Code
-            && Message == other.Message
-            && Type == other.Type
-            && _args.SequenceEqual(other._args)
-            && ValidationErrorsEqual(ValidationErrors, other.ValidationErrors);
-    }
-
-    /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Code, Message, Type, _args.Length);
-
-    private static bool ValidationErrorsEqual(
-       ImmutableDictionary<string, ImmutableArray<ValidationFieldError>>? a,
-       ImmutableDictionary<string, ImmutableArray<ValidationFieldError>>? b)
-    {
-        if (a is null && b is null)
-            return true;
-        if (a is null || b is null)
-            return false;
-        if (a.Count != b.Count)
-            return false;
-        foreach (KeyValuePair<string, ImmutableArray<ValidationFieldError>> kvp in a)
-        {
-            if (!b.TryGetValue(kvp.Key, out ImmutableArray<ValidationFieldError> bValue))
-                return false;
-            if (!kvp.Value.SequenceEqual(bValue))
-                return false;
+            if (r.IsFailure)
+                return r.Error;
+            values.Add(r.Value);
         }
 
-        return true;
+        return values;
     }
-}
 
-/// <summary>
-/// Validation runtime du contrat « <see cref="ResultError.Args"/> = uniquement des primitifs ».
-/// </summary>
-/// <remarks>
-/// Pour un enforcement compile-time, un Roslyn analyzer serait nécessaire. À défaut, ce validator
-/// échoue rapidement en test ou en dev dès qu'un type non primitif est passé.
-/// </remarks>
-internal static class ResultErrorArgsValidator
-{
+    /// <summary>Surcharge <c>params</c> de <see cref="Combine{T}(IEnumerable{Result{T}})"/>.</summary>
+    public static Result<IReadOnlyList<T>> Combine<T>(params Result<T>[] results)
+        => Combine((IEnumerable<Result<T>>)results);
+
+    // ──────────────────────────────────────────────────────────────────
+    // Aggregate : collecte toutes les erreurs en ValidationErrors indexés
+    // ──────────────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Vérifie que tous les éléments d'<paramref name="args"/> sont des types primitifs autorisés.
+    /// Combine N <see cref="Result{T}"/> en un <see cref="Result{TList}"/> de type <see cref="IReadOnlyList{T}"/>.
+    /// Sémantique <strong>aggregate</strong> : collecte toutes les erreurs dans
+    /// <see cref="ResultError.ValidationErrors"/> indexées par position (<c>"[0]"</c>, <c>"[1]"</c>, ...).
     /// </summary>
-    /// <param name="args">Arguments à valider.</param>
-    /// <param name="paramName">Nom du paramètre source pour l'exception.</param>
-    /// <exception cref="ArgumentException">Si un élément non-primitif est trouvé.</exception>
-    public static void Validate(ImmutableArray<object> args, string paramName)
+    /// <typeparam name="T">Type des valeurs.</typeparam>
+    /// <param name="results">Séquence de Results à agréger.</param>
+    /// <returns>
+    /// Result de succès contenant toutes les valeurs si aucun échec ; sinon Result d'échec de type
+    /// <see cref="ErrorType.Validation"/> avec un dictionnaire indexé des erreurs.
+    /// </returns>
+    /// <example>
+    /// <code>
+    /// Result.Aggregate(validatePseudo, validateEmail, validateAge)
+    ///     .Match(
+    ///         _   =&gt; "OK",
+    ///         err =&gt; string.Join(", ", err.ValidationErrors.Keys));
+    /// </code>
+    /// </example>
+    public static Result<IReadOnlyList<T>> Aggregate<T>(IEnumerable<Result<T>> results)
     {
-        if (args.IsDefault)
-            return;
+        List<T> values = [];
+        ImmutableDictionary<string, ImmutableArray<ValidationFieldError>>.Builder errors
+            = ImmutableDictionary.CreateBuilder<string, ImmutableArray<ValidationFieldError>>();
+        int index = 0;
 
-        foreach (object? arg in args)
+        foreach (Result<T> r in results)
         {
-            if (arg is null)
-                continue;
+            if (r.IsFailure)
+            {
+                ValidationFieldError fieldError = r.Error.Args.IsDefaultOrEmpty
+                    ? new ValidationFieldError(r.Error.Code)
+                    : new ValidationFieldError(r.Error.Code, r.Error.Args);
+                errors.Add($"[{index}]", [fieldError]);
+            }
+            else
+            {
+                values.Add(r.Value);
+            }
 
-            Type t = arg.GetType();
-            if (t.IsPrimitive || t == typeof(string) || t == typeof(decimal))
-                continue;
-
-            throw new ArgumentException(
-                $"Args may only contain primitive types (string, int, bool, decimal, ...). " +
-                $"Found: {t.FullName}. " +
-                $"Reason: non-primitive types have culture-dependent representations that conflict with serialization and localization.",
-                paramName);
+            index++;
         }
+
+        if (errors.Count > 0)
+        {
+            return new ResultError(
+                "Aggregate.ValidationFailed",
+                "Une ou plusieurs validations ont échoué",
+                ErrorType.Validation)
+            {
+                ValidationErrors = errors.ToImmutable()
+            };
+        }
+
+        return values;
     }
+
+    /// <summary>Surcharge <c>params</c> de <see cref="Aggregate{T}(IEnumerable{Result{T}})"/>.</summary>
+    public static Result<IReadOnlyList<T>> Aggregate<T>(params Result<T>[] results)
+        => Aggregate((IEnumerable<Result<T>>)results);
 }

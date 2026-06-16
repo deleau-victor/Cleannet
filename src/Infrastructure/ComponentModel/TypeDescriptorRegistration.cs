@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Domain.Abstractions;
 
 namespace Infrastructure.ComponentModel;
 

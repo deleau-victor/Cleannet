@@ -1,4 +1,4 @@
-namespace Domain.Abstractions;
+namespace Domain.Abstractions.Results;
 
 /// <summary>
 /// Type représentant l'absence de valeur, équivalent fonctionnel à <c>void</c> dans un contexte générique.

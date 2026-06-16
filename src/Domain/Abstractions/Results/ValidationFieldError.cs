@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 
-namespace Domain.Abstractions;
+namespace Domain.Abstractions.Results;
 
 /// <summary>
 /// Représente une erreur de validation pour un champ spécifique : un code d'erreur identifiant le problème
@@ -59,5 +59,14 @@ public sealed record ValidationFieldError(string Code)
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => Code.GetHashCode(StringComparison.Ordinal);
+    public override int GetHashCode()
+    {
+        HashCode hash = new();
+        hash.Add(Code, StringComparer.Ordinal);
+
+        foreach (object arg in _args)
+            hash.Add(arg);
+
+        return hash.ToHashCode();
+    }
 }

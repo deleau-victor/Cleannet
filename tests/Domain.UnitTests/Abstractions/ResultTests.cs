@@ -1,3 +1,5 @@
+using Domain.Abstractions.Results;
+
 namespace Domain.UnitTests.Abstractions;
 
 public class ResultTests
